@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Logger</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        button:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        button:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-start {
+            background: #22c55e;
+            color: white;
+        }
+
+        .btn-log {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-stop {
+            background: #ef4444;
+            color: white;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.idle {
+            background: #e5e7eb;
+            color: #6b7280;
+        }
+
+        .status.active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .log-entries {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .log-header {
+            background: #f9fafb;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .log-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .log-entry {
+            padding: 12px 20px;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            gap: 15px;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: #6b7280;
+            font-family: monospace;
+            white-space: nowrap;
+        }
+
+        .log-note {
+            color: #1f2937;
+            flex: 1;
+            word-break: break-word;
+        }
+
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: #9ca3af;
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+        }
+
+        .modal h2 {
+            margin-bottom: 15px;
+            color: #1f2937;
+        }
+
+        .modal textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .modal textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 15px;
+        }
+
+        .btn-cancel {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .btn-save {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .session-info {
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Production Logger</h1>
+
+        <div class="status idle" id="status">Session not started</div>
+
+        <div class="session-info" id="sessionInfo"></div>
+
+        <div class="controls">
+            <button class="btn-start" id="btnStart">Start</button>
+            <button class="btn-log" id="btnLog" disabled>Log</button>
+            <button class="btn-stop" id="btnStop" disabled>Stop</button>
+        </div>
+
+        <div class="log-entries">
+            <div class="log-header">Log Entries (<span id="entryCount">0</span>)</div>
+            <div class="log-list" id="logList">
+                <div class="empty-state">No entries yet. Start a session and add logs.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Entry Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <h2>Add Log Entry</h2>
+            <textarea id="noteInput" placeholder="Enter your note..."></textarea>
+            <div class="modal-buttons">
+                <button class="btn-cancel" id="btnCancel">Cancel</button>
+                <button class="btn-save" id="btnSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let sessionActive = false;
+        let sessionStartTime = null;
+        let entries = [];
+
+        // DOM Elements
+        const statusEl = document.getElementById('status');
+        const sessionInfoEl = document.getElementById('sessionInfo');
+        const btnStart = document.getElementById('btnStart');
+        const btnLog = document.getElementById('btnLog');
+        const btnStop = document.getElementById('btnStop');
+        const logList = document.getElementById('logList');
+        const entryCount = document.getElementById('entryCount');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const noteInput = document.getElementById('noteInput');
+        const btnCancel = document.getElementById('btnCancel');
+        const btnSave = document.getElementById('btnSave');
+
+        // Format timestamp for display
+        function formatTimestamp(date) {
+            return date.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // Format timestamp for CSV
+        function formatTimestampCSV(date) {
+            return date.toISOString();
+        }
+
+        // Update session duration display
+        function updateSessionInfo() {
+            if (!sessionActive || !sessionStartTime) {
+                sessionInfoEl.textContent = '';
+                return;
+            }
+
+            const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+            const hours = Math.floor(elapsed / 3600);
+            const minutes = Math.floor((elapsed % 3600) / 60);
+            const seconds = elapsed % 60;
+
+            sessionInfoEl.textContent = `Session duration: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        // Render log entries
+        function renderEntries() {
+            entryCount.textContent = entries.length;
+
+            if (entries.length === 0) {
+                logList.innerHTML = '<div class="empty-state">No entries yet. Start a session and add logs.</div>';
+                return;
+            }
+
+            logList.innerHTML = entries.map((entry, index) => `
+                <div class="log-entry">
+                    <span class="log-time">${formatTimestamp(entry.timestamp)}</span>
+                    <span class="log-note">${escapeHtml(entry.note)}</span>
+                </div>
+            `).join('');
+
+            // Scroll to bottom
+            logList.scrollTop = logList.scrollHeight;
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Generate and download CSV
+        function downloadCSV() {
+            if (entries.length === 0) {
+                alert('No entries to export.');
+                return;
+            }
+
+            const sessionEnd = new Date();
+            const csvRows = [
+                ['Timestamp', 'Note'],
+                ...entries.map(entry => [
+                    formatTimestampCSV(entry.timestamp),
+                    `"${entry.note.replace(/"/g, '""')}"`
+                ])
+            ];
+
+            const csvContent = csvRows.map(row => row.join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            const filename = `production-log-${sessionStartTime.toISOString().slice(0, 10)}-${sessionStartTime.toISOString().slice(11, 19).replace(/:/g, '')}.csv`;
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Start session
+        btnStart.addEventListener('click', () => {
+            sessionActive = true;
+            sessionStartTime = new Date();
+            entries = [];
+
+            statusEl.className = 'status active';
+            statusEl.textContent = `Session started at ${formatTimestamp(sessionStartTime)}`;
+
+            btnStart.disabled = true;
+            btnLog.disabled = false;
+            btnStop.disabled = false;
+
+            renderEntries();
+            updateSessionInfo();
+        });
+
+        // Open log modal
+        btnLog.addEventListener('click', () => {
+            modalOverlay.classList.add('active');
+            noteInput.value = '';
+            noteInput.focus();
+        });
+
+        // Close modal
+        btnCancel.addEventListener('click', () => {
+            modalOverlay.classList.remove('active');
+        });
+
+        // Close modal on overlay click
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                modalOverlay.classList.remove('active');
+            }
+        });
+
+        // Save log entry
+        btnSave.addEventListener('click', () => {
+            const note = noteInput.value.trim();
+            if (!note) {
+                alert('Please enter a note.');
+                return;
+            }
+
+            entries.push({
+                timestamp: new Date(),
+                note: note
+            });
+
+            modalOverlay.classList.remove('active');
+            renderEntries();
+        });
+
+        // Handle Enter key in textarea (Ctrl+Enter or Cmd+Enter to save)
+        noteInput.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                btnSave.click();
+            }
+            if (e.key === 'Escape') {
+                modalOverlay.classList.remove('active');
+            }
+        });
+
+        // Stop session and download CSV
+        btnStop.addEventListener('click', () => {
+            if (entries.length > 0) {
+                downloadCSV();
+            }
+
+            sessionActive = false;
+            statusEl.className = 'status idle';
+            statusEl.textContent = 'Session ended';
+            sessionInfoEl.textContent = '';
+
+            btnStart.disabled = false;
+            btnLog.disabled = true;
+            btnStop.disabled = true;
+        });
+
+        // Update session duration every second
+        setInterval(updateSessionInfo, 1000);
+    </script>
+</body>
+</html>
