@@ -209,9 +209,16 @@
 
         .session-info {
             text-align: center;
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 20px;
+            font-size: 48px;
+            font-weight: 700;
+            font-family: monospace;
+            color: #1f2937;
+            margin-bottom: 25px;
+            letter-spacing: 2px;
+        }
+
+        .session-info:empty {
+            display: none;
         }
     </style>
 </head>
@@ -295,7 +302,7 @@
             const minutes = Math.floor((elapsed % 3600) / 60);
             const seconds = elapsed % 60;
 
-            sessionInfoEl.textContent = `Session duration: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            sessionInfoEl.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
         // Render log entries
